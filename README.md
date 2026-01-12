@@ -1,39 +1,21 @@
-# FlowCF-Dockerized: Flow Matching for Collaborative Filtering (Optimized)
+# FlowCF: Item Cold-Start Implementation
 
-> ** Note:** This is an **unofficial, modified implementation** of the paper *"Flow Matching for Collaborative Filtering (KDD 2025)"*.
-> This repository was created to improve reproducibility, fix Linux/Docker compatibility issues, and optimize training performance.
+This repository is an **unofficial modified version** of the paper *"Flow Matching for Collaborative Filtering (KDD 2025)"*.
 
----
-
-## Original Paper & Source
-All credits for the model architecture and core algorithms belong to the original authors.
-
-* **Paper Title:** Flow Matching for Collaborative Filtering (KDD 2025)
-* **Authors:** Chengkai Liu, Yangtian Zhang, Jianling Wang, Rex Ying, James Caverlee
-* **Original Paper:** [https://arxiv.org/abs/2502.07303](https://arxiv.org/abs/2502.07303)
+### 📜 Original Source
+* **Paper:** [Flow Matching for Collaborative Filtering (arXiv)](https://arxiv.org/abs/2502.07303)
 * **Original Repository:** [Insert Link to Original GitHub Repo Here]
 
----
+### 🛠 Key Modifications
+This project adapts the original FlowCF model specifically for **Item Cold-Start scenarios**.
+The code has been modified to:
 
-## 🛠 Modifications & Improvements
-
-This project includes the following engineering improvements over the original implementation:
-
-### 1. Full Dockerization
-* Added `Dockerfile` and `docker-compose.yml` for a consistent, reproducible environment.
-* Solved dependency conflicts between **RecBole** and recent **Pandas** versions.
-* Fixed pathing issues (`utils.py`, `inference.py`) to ensure smooth execution on Linux servers.
-
-### 2. Code Hotfixes
-* **RecBole Compatibility:** Patched `AttributeError` related to `DataFrame.shuffle` and `Series.numpy` methods in the library.
-* **Config Loading:** Fixed an issue where custom parameters (e.g., `s_steps`) in `.yaml` files were being ignored or overridden by defaults.
-
-### 3. Performance Tuning
-* **High-Performance Configuration:** Optimized `flowcf.yaml` for high-end GPUs (Increased Batch Size, Tuned MLP dimensions).
-* **Cold-Start Simulation:** Added custom scripts (`inference.py`, `evaluate.py`) to simulate and evaluate **Item Cold-Start** scenarios (predicting potential users for new items).
+1.  **Simulate Cold-Start:** Predict potential target users for newly released items (based on seed interactions).
+2.  **Dockerization:** Provide a stable Docker environment for reproducibility.
+3.  **Optimization:** Tuned hyperparameters for high-performance training on Linux servers.
 
 ---
-
+*Note: This code is for educational and research purposes only. All rights to the original logic belong to the authors.*
 ## Quick Start
 
 ### 1. Prerequisites
