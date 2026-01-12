@@ -1,0 +1,17 @@
+services:
+  flowcf:
+    build: .
+    image: coldflowcf
+    container_name: flowcf_container
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./dataset:/app/dataset
+      - ./saved:/app/saved
+    tty: true
+    stdin_open: true
