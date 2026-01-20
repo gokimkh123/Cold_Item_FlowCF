@@ -1,0 +1,15 @@
+# 1. 핵심 프레임워크 (RecBole)
+recbole>=1.1.1
+
+# 2. 딥러닝 및 수치 연산 (FlowCF/DiffCF 핵심)
+torch>=1.10.0
+numpy>=1.20.0
+
+# 3. 데이터 처리 및 유틸리티
+pandas>=1.3.0
+pyyaml>=5.1
+tqdm>=4.60.0
+
+# 4. 시각화 및 분석 (auto_experiment.py 실행용)
+matplotlib>=3.5.0
+seaborn>=0.11.0
