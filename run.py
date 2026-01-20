@@ -9,8 +9,17 @@ from recbole.data import create_dataset, data_preparation
 from recbole.utils import init_logger, init_seed
 from recbole.trainer import Trainer
 from model import * 
+import torch                    # [추가]
+import torch.backends.cudnn as cudnn # [추가]
+# 모델 Import (KeyError 방지용 안전 코드)
+from model.flowcf import FlowCF
+try:
+    from model.diffcf import DiffCF
+except ImportError:
+    pass
 
 if __name__ == '__main__':
+    cudnn.benchmark = True
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='flowcf.yaml')
     
