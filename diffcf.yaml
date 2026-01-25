@@ -33,13 +33,13 @@ alias_of_item_id: ~
 # =========================================================
 # MLP 레이어 크기: FlowCF와 똑같이 맞춤
 dims_mlp: [300, 300]
-time_embedding_size: 64
+time_embedding_size: 16
 dropout: 0.2
 
 # =========================================================
 # 3. 학습 하이퍼파라미터 (FlowCF와 100% 동일)
 # =========================================================
-epochs: 300
+epochs: 100
 train_batch_size: 4096
 eval_batch_size: 4096    # 특히 평가(추론) 때는 이게 커야 속도가 빨라집니다.
 learning_rate: 0.001
@@ -53,7 +53,7 @@ weight_decay: 0.0        # 가중치 규제 끔
 # [Step 수] Flow Matching은 20으로 충분하지만, 
 # Diffusion은 노이즈 제거 특성상 보통 100~1000이 필요합니다.
 # 비교를 위한 최소 기준인 100으로 설정합니다.
-n_steps: 100
+n_steps: 300
 
 # [Noise Schedule] Gaussian Diffusion의 핵심 파라미터 (Linear Schedule)
 beta_start: 0.0001
@@ -63,5 +63,6 @@ beta_end: 0.02
 # 옵션: 'gelu' 또는 'leakyrelu'
 act_func: 'leakyrelu'
 
-# [참고] Diffusion 모델은 태생적으로 Gaussian 분포를 사용하므로
-# FlowCF에 있던 prior_type: 'bernoulli' 옵션은 제거되었습니다.
+valid_metric: recall@20  # 검증 시 Best Model을 고르는 기준 지표
+metrics: ['Recall', 'NDCG'] # (참고용)
+topk: [10, 20]           # 평가할 K 값

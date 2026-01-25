@@ -93,7 +93,7 @@ class FlowCF(GeneralRecommender):
         self.input_dim = self.target_dim + self.side_dim
         self.n_steps = config["n_steps"]
         # yaml에 s_steps가 없으면 기본값 1 (모든 스텝 밟기)로 설정
-        self.s_steps = config["s_steps"]
+        self.s_steps = config["n_steps"]
         self.time_emb_size = config["time_embedding_size"]
         
         # [작성자님 요청 수정] Time Steps 명시적 정의
