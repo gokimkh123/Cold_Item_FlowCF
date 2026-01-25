@@ -8,7 +8,6 @@ data_path: /app/dataset/ML1M/
 
 gpu_id: '0'
 log_wandb: False
-
 benchmark_filename: ['train', 'vali', 'test']
 field_separator: "\t"
 USER_ID_FIELD: mid
@@ -29,7 +28,7 @@ alias_of_item_id: ~
 # 기존 [2000, 2000, 2000, 2000]은 너무 과합니다.
 dims_mlp: [300, 300]
 
-time_embedding_size: 64
+time_embedding_size: 16
 
 # [핵심 변경 2] 논문 명시: "The initial dropout rate of the MLP in FlowCF is fixed at 0"
 # Flow Matching은 경로를 학습하므로 Dropout이 방해가 될 수 있어 0을 씁니다.
@@ -46,6 +45,9 @@ eval_batch_size: 4096   # [최적화] A6000 성능 활용 (논문 결과엔 영�
 learning_rate: 0.001
 
 eval_step: 10             # 잦은 평가는 시간 낭비이므로 10 정도 추천
+valid_metric: recall@20  # 검증 시 Best Model을 고르는 기준 지표
+metrics: ['Recall', 'NDCG'] # (참고용)
+topk: [10, 20]           # 평가할 K 값
 stopping_step: 30
 worker: 16                # CPU 병목 방지
 
@@ -55,8 +57,8 @@ weight_decay: 0.0
 # =========================================================
 # 4. Flow Matching 알고리즘 설정
 # =========================================================
-n_steps: 100       # Flow Matching은 20번이면 충분 (속도 빠름)
-s_steps: 10       # Solver step (ODE 풀이 정밀도)
+n_steps: 20       # Flow Matching은 20번이면 충분 (속도 빠름)
+s_steps: 2       # Solver step (ODE 풀이 정밀도)
 
 # FlowCF의 핵심인 베르누이(이산형) 분포 사용
 prior_type: 'bernoulli'

@@ -11,6 +11,8 @@ from recbole.trainer import Trainer
 from model import * 
 import torch                    # [추가]
 import torch.backends.cudnn as cudnn # [추가]
+from trainer import ColdStartTrainer
+
 # 모델 Import (KeyError 방지용 안전 코드)
 from model.flowcf import FlowCF
 try:
@@ -57,7 +59,7 @@ if __name__ == '__main__':
     model = locals()[config['model']](config, train_data.dataset).to(config['device'])
     logger.info(model)
 
-    trainer = Trainer(config, model)
+    trainer = ColdStartTrainer(config, model)
 
     # 저장 파일명에 옵션 붙이기 (구분을 위해)
     run_name = f"FlowCF_{config['prior_type']}_{config['act_func']}"
