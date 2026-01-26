@@ -11,7 +11,9 @@ import yaml
 from tqdm import tqdm
 
 sys.path.append(os.getcwd())
-
+# evaluate.py 최상단 import 아래에 추가
+import warnings
+warnings.filterwarnings('ignore') # 지저분한 판다스 경고 무시
 from recbole.config import Config
 from recbole.data import create_dataset
 from recbole.utils import init_seed
