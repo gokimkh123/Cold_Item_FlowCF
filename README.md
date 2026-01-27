@@ -1,3 +1,4 @@
+```bash
 ColdStart-FlowCF-TF/
 ├── data/                 # 원본 데이터 및 전처리된 데이터
 │   ├── ML1M/             # 무비렌즈 1M 데이터셋
@@ -13,3 +14,4 @@ ColdStart-FlowCF-TF/
 ├── train.py              # GradientTape 기반의 진짜 학습 루프
 ├── evaluate.py           # Cold-start 전용 평가 스크립트
 └── inference.py          # 특정 아이템 기반 유저 추천 추론
+```
