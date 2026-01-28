@@ -31,7 +31,7 @@ ColdStart-FlowCF-TF/
 └── requirements.txt          # Python dependencies
 ```
 
-🐳 2. Environment Setup (Docker)
+## 🐳 2. Environment Setup (Docker)
 This project is optimized for TensorFlow GPU environments. We strongly recommend using Docker and Docker Compose for a seamless setup.
 
 Prerequisites
@@ -52,7 +52,7 @@ docker exec -it cold_flow_tf /bin/bash
 Note: The docker-compose.yml mounts the current directory to /app. Any code changes made locally will be immediately reflected inside the container.
 
 
-🚀 3. Usage
+## 🚀 3. Usage
 Run the following commands inside the Docker container.
 
 3.1. Training (Single Run)
@@ -65,7 +65,7 @@ python train.py --steps 10
 ```
 --steps: Defines both training time-discretization ($n\_step$) and inference sampling steps.
 
-📊 4. Monitoring (TensorBoard)
+## 📊 4. Monitoring (TensorBoard)
 Real-time monitoring of Loss curves and Recall@20 performance.
 
 Launch TensorBoard inside the container:
