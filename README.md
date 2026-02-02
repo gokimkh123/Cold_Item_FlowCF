@@ -44,7 +44,7 @@ Build and run the container using docker-compose. This handles port forwarding (
 
 ```Bash
 # 1. Build and start the container in background
-docker-compose up -d --build
+docker compose up -d --build
 
 # 2. Access the container shell
 docker exec -it cold_flow_tf /bin/bash
