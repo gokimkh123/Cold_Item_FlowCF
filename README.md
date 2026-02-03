@@ -20,8 +20,7 @@ ColdStart-FlowCF-TF/
 │   ├── model.py              # FlowModel architecture (MLP + Time Embeddings)
 │   ├── flow_logic.py         # Flow Matching logic (Vector Field & ODE Solver)
 │   └── metrics.py            # Evaluation metrics (Recall@K, NDCG@K)
-├── configs/
-│   └── base_config.yaml      # Hyperparameter configurations
+├── config.yaml      # Hyperparameter configurations
 ├── train.py                  # Main training loop with tf.GradientTape
 ├── evaluate.py               # Evaluation script for cold-start scenarios
 ├── run_all.py                # Automated experiment script (Step ablation study)
