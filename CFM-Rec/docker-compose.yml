@@ -4,6 +4,10 @@ services:
   cold-flow:
     build: .
     container_name: cold_flow_tf
+  
+    ports:
+      - "6006:6006" 
+    
     volumes:
       - .:/app  
       - ./dataset:/app/dataset 

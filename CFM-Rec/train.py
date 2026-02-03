@@ -41,69 +41,121 @@ def train_step(model, optimizer, x_1, cond, t, x_0):
     return loss
 
 # ==============================================================================
-# [핵심] evaluate.py와 동일한 방식의 User-to-Item 평가 함수
+# 1. Validation: 모든 스텝을 탐색(Search)하여 최적 스텝 도출
+# 2. Test: 도출된 최적 스텝(fixed_step)으로 고정하여 평가
 # ==============================================================================
-def evaluate_user_to_item(model, flow, dataset, steps, k_list=[10, 20]):
+def evaluate_user_to_item(model, flow, dataset, steps, k_list=[10, 20], fixed_step=None):
     """
-    모든 Cold Item에 대한 예측을 수행한 뒤,
-    행렬을 전치(Transpose)하여 [Users x Items] 관점에서 평가합니다.
+    fixed_step=None  -> (Validation용) 1~steps 전체 탐색 후 Best Step 반환
     """
-    all_preds = []
+    
+    # 모드에 따른 로그 출력
+    if fixed_step is None:
+        console.print(f"[bold cyan] [Validation] Searching Best Step across {steps} Steps...[/]")
+        run_steps = steps
+    else:
+        console.print(f"[bold green] [Test] Running Inference with Fixed Best Step: {fixed_step}/{steps}[/]")
+        run_steps = fixed_step
+
+    # 결과 저장소
+    step_outputs = {i: [] for i in range(1, run_steps + 1)} if fixed_step is None else {}
+    test_outputs = [] # Test 모드일 때 마지막 결과만 저장
     all_targets = []
     
-    # 1. 배치 단위로 추론 (Item-based)
     for x_1, cond in dataset:
         batch_bs = tf.shape(x_1)[0]
-        curr_x = flow.get_prior_sample(batch_bs)
-        dt = 1.0 / steps
-        
-        for i in range(steps):
-            t_val = i * dt
-            t_tensor = tf.fill([batch_bs, 1], float(t_val))
-            pred = model(curr_x, cond, t_tensor, training=False)
-            curr_x = flow.inference_step(curr_x, pred, t_val, dt)
-            
-        all_preds.append(curr_x.numpy())
         all_targets.append(x_1.numpy())
         
-    # 2. 전체 행렬 병합 (Items x Users)
-    pred_matrix = np.concatenate(all_preds, axis=0)
-    target_matrix = np.concatenate(all_targets, axis=0)
-    
-    # 3. User 관점으로 전치 (Users x Items)
-    # 이제 row는 User가 되고, col은 Test set의 Cold Items가 됩니다.
-    pred_matrix_T = pred_matrix.T
-    target_matrix_T = target_matrix.T
-    
-    num_users = pred_matrix_T.shape[0]
-    results = {f'R@{k}': [] for k in k_list}
-    results.update({f'N@{k}': [] for k in k_list})
-
-    # 4. 각 유저별로 평가
-    for u in range(num_users):
-        # 정답: 이 유저가 좋아한 Cold Items (Test set 내에서)
-        gt_items = np.where(target_matrix_T[u] > 0.5)[0]
-        if len(gt_items) == 0: continue 
+        curr_x = flow.get_prior_sample(batch_bs)
+        dt = 1.0 / steps  # dt는 전체 steps(N=100) 기준으로 고정해야 궤적이 유지됨
         
-        # 예측: 점수가 높은 순서대로 아이템 인덱스 추출
-        top_indices = np.argsort(pred_matrix_T[u])[-max(k_list):][::-1]
-        
-        m = compute_metrics(top_indices, gt_items, k_list=k_list)
-        for k in k_list:
-            results[f'R@{k}'].append(m[f'Recall@{k}'])
-            results[f'N@{k}'].append(m[f'NDCG@{k}'])
+        # 지정된 스텝만큼만 루프 실행
+        for i in range(run_steps):
+            t_val = i * dt
+            t_tensor = tf.fill([batch_bs, 1], float(t_val))
             
-    final_metrics = {}
-    for k in k_list:
-        final_metrics[f'R@{k}'] = np.mean(results[f'R@{k}']) if results[f'R@{k}'] else 0.0
-        final_metrics[f'N@{k}'] = np.mean(results[f'N@{k}']) if results[f'N@{k}'] else 0.0
+            # 모델 예측
+            pred = model(curr_x, cond, t_tensor, training=False)
+            
+            # 다음 상태로 이동
+            curr_x = flow.inference_step(curr_x, pred, t_val, dt)
+            
+            # [저장 로직 분기]
+            if fixed_step is None:
+                # Validation: 모든 스텝 저장 (탐색용)
+                step_outputs[i+1].append(pred.numpy())
+            else:
+                # Test: 마지막 스텝만 저장 (평가용)
+                if i == run_steps - 1:
+                    test_outputs.append(pred.numpy())
+
+    # 정답 행렬 병합 및 전치
+    target_matrix = np.concatenate(all_targets, axis=0)
+    target_matrix_T = target_matrix.T
+    num_users = target_matrix_T.shape[0]
+
+    # --- [A] Validation 모드: Best Step 탐색 ---
+    if fixed_step is None:
+        best_step = -1
+        best_recall = -1.0
+        final_step_results = {}
         
-    return final_metrics
+        # 모든 스텝 평가
+        for step in range(1, steps + 1):
+            pred_matrix = np.concatenate(step_outputs[step], axis=0)
+            pred_matrix_T = pred_matrix.T
+            
+            results = _calculate_metrics_batch(pred_matrix_T, target_matrix_T, num_users, k_list)
+            final_step_results[step] = results
+            
+            if results['R@20'] > best_recall:
+                best_recall = results['R@20']
+                best_step = step
+        
+        best_result = final_step_results[best_step]
+        best_result['Best_Step'] = best_step
+        
+        print(f"\n [Vali] Found Optimal Step: {best_step} (R@20: {best_recall:.4f})\n")
+        return best_result
+
+    # --- [B] Test 모드: 고정 스텝 평가 ---
+    else:
+        pred_matrix = np.concatenate(test_outputs, axis=0)
+        pred_matrix_T = pred_matrix.T
+        
+        results = _calculate_metrics_batch(pred_matrix_T, target_matrix_T, num_users, k_list)
+        results['Best_Step'] = fixed_step # 시각화를 위해 고정된 스텝 반환
+        
+        print(f"\n [Test] Final Result at Step {fixed_step}:")
+        print(f"   R@20: {results['R@20']:.4f} | N@20: {results['N@20']:.4f}\n")
+        return results
+
+def _calculate_metrics_batch(pred_matrix_T, target_matrix_T, num_users, k_list):
+    """메트릭 계산 보조 함수"""
+    metrics_keys = ['R', 'N', 'P', 'H']
+    raw_results = {f'{key}@{k}': [] for key in metrics_keys for k in k_list}
+    
+    for u in range(num_users):
+        gt_items = np.where(target_matrix_T[u] > 0.5)[0]
+        if len(gt_items) == 0: continue
+        
+        top_indices = np.argsort(pred_matrix_T[u])[-max(k_list):][::-1]
+        m = compute_metrics(top_indices, gt_items, k_list=k_list)
+        
+        for k in k_list:
+            raw_results[f'R@{k}'].append(m.get(f'Recall@{k}', 0.0))
+            raw_results[f'N@{k}'].append(m.get(f'NDCG@{k}', 0.0))
+            raw_results[f'P@{k}'].append(m.get(f'Precision@{k}', 0.0))
+            raw_results[f'H@{k}'].append(m.get(f'Hit@{k}', 0.0))
+            
+    return {k: np.mean(v) if v else 0.0 for k, v in raw_results.items()}
+
 
 def train():
     title = "Popularity Prior" if args.prior_type == 'popularity' else "Pure Noise Prior"
     console.print(Panel.fit(f"[bold yellow]CFM-Rec Training ({title}, N={args.steps})[/]", border_style="yellow"))
-    # 기존 모델 파일 정리
+    
+    # 모델 파일 정리
     for f in glob.glob("saved_model/best_flow_model*"):
         try: os.remove(f)
         except OSError: pass
@@ -114,10 +166,7 @@ def train():
 
     with console.status("[bold green]Loading Data...", spinner="dots"):
         loader = ColdStartDataLoader(config)
-        
-        # [수정 완료] build()의 반환값을 언패킹하여 받습니다.
         num_items, num_users = loader.build()
-        
         train_ds = loader.get_dataset(mode='train')
         vali_ds = loader.get_dataset(mode='vali')
         test_ds = loader.get_dataset(mode='test')
@@ -132,12 +181,15 @@ def train():
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     log_dir = f'logs/COMPARISON/FLOW_{args.prior_type}/step_{args.steps:03d}_{current_time}'
     summary_writer = tf.summary.create_file_writer(log_dir)
+    
     epochs = config['epochs']
     eval_step = config.get('eval_step', 10)
+    
     best_recall = -1.0
+    best_val_step = args.steps # 기본값 (Validation 전까지 사용)
     patience_cnt = 0
+    
     steps_per_epoch = int(np.ceil(loader.num_entities / config['batch_size']))
-
     progress = Progress(
         SpinnerColumn(), TextColumn("[bold blue]{task.description}"), BarColumn(),
         TaskProgressColumn(), TimeRemainingColumn(), TextColumn("{task.fields[info]}"), console=console
@@ -156,9 +208,7 @@ def train():
             for x_1, cond in train_ds:
                 curr_bs = tf.shape(x_1)[0]
                 t = tf.cast(tf.random.uniform((curr_bs, 1), 1, args.steps+1, dtype=tf.int32), tf.float32) / args.steps
-                probs = tf.tile(tf.expand_dims(user_activity, 0), [curr_bs, 1])
-                x_0 = tf.cast(tf.random.uniform(tf.shape(x_1)) < probs, tf.float32)
-                
+                x_0 = flow.get_prior_sample(curr_bs)
                 loss = train_step(model, optimizer, x_1, cond, t, x_0)
                 train_loss += loss.numpy()
                 train_steps += 1
@@ -168,23 +218,28 @@ def train():
             with summary_writer.as_default():
                 tf.summary.scalar('Loss/train', avg_loss, step=epoch)
             
-            # --- Validation Phase (User-to-Item) ---
+            # --- Validation Phase ---
             if (epoch + 1) % eval_step == 0:
-                progress.update(epoch_task, description="[bold yellow]Validating (User-to-Item)...", info="")
+                progress.update(epoch_task, description="[bold yellow]Validating (Search Best Step)...", info="")
                 
-                val_metrics = evaluate_user_to_item(model, flow, vali_ds, args.steps, k_list=[10, 20])
+                # [Validation] fixed_step=None으로 호출하여 최적 스텝 탐색
+                val_metrics = evaluate_user_to_item(model, flow, vali_ds, args.steps, k_list=[10, 20], fixed_step=None)
+                
                 r10, r20 = val_metrics['R@10'], val_metrics['R@20']
-
+                
                 with summary_writer.as_default():
                     tf.summary.scalar('Metrics/Recall@10', r10, step=epoch)
                     tf.summary.scalar('Metrics/Recall@20', r20, step=epoch)
 
                 log_msg = f"E{epoch+1:03d} | Loss: {avg_loss:.4f} | Val R@10: {r10:.4f} | Val R@20: {r20:.4f}"
+                
                 if r20 > best_recall:
                     best_recall = r20
+           
+                    best_val_step = val_metrics['Best_Step']
                     patience_cnt = 0
                     model.save_weights("saved_model/best_flow_model")
-                    log_msg += " [bold green]★ Best[/]"
+                    log_msg += f" [bold green]★ Best (Step {best_val_step})[/]"
                 else:
                     patience_cnt += 1
                 
@@ -192,27 +247,29 @@ def train():
                 if patience_cnt >= config.get('patience', 10): break
             progress.update(overall_task, advance=1)
 
-    # --- Final Test Phase (User-to-Item) ---
-    console.print("\n[bold yellow]🚀 Running Final User-to-Item Evaluation on TEST SET...[/]")
+    # --- Final Test Phase ---
+    console.print(f"\n[bold yellow] Final Test with Optimal Step found in Validation: {best_val_step}[/]")
     try: model.load_weights("saved_model/best_flow_model")
     except: pass
 
-    test_metrics = evaluate_user_to_item(model, flow, test_ds, args.steps, k_list=[10, 20])
+    # [Test] 저장해둔 best_val_step을 고정값으로 전달
+    test_metrics = evaluate_user_to_item(model, flow, test_ds, args.steps, k_list=[10, 20], fixed_step=best_val_step)
     
     final_r10, final_r20 = test_metrics['R@10'], test_metrics['R@20']
     final_n20 = test_metrics['N@20']
-
+    
     with summary_writer.as_default():
         tf.summary.scalar('Test/Recall@10', final_r10, step=epochs)
         tf.summary.scalar('Test/Recall@20', final_r20, step=epochs)
         tf.summary.scalar('Test/NDCG@20', final_n20, step=epochs)
+        tf.summary.scalar('Test/Best_Step', best_val_step, step=epochs)
 
     console.print(Panel.fit(
-        f"🏆 FINAL TEST RESULT (User-to-Item) 🏆\n\n"
-        f"Recall@10 : [bold red]{final_r10:.4f}[/]\n"
-        f"Recall@20 : [bold red]{final_r20:.4f}[/]\n"
-        f"NDCG@20   : [bold red]{final_n20:.4f}[/]",
-        border_style="red"
+        f" [bold]FINAL TEST RESULT (CFM-Rec)[/] \n\n"
+        f"Used Inference Step: [bold cyan]{best_val_step}[/] (Fixed from Vali)\n"
+        f"K=10 | R: [red]{test_metrics['R@10']:.4f}[/] | P: [green]{test_metrics['P@10']:.4f}[/] | N: [blue]{test_metrics['N@10']:.4f}[/] | H: [yellow]{test_metrics['H@10']:.4f}[/]\n"
+        f"K=20 | R: [red]{test_metrics['R@20']:.4f}[/] | P: [green]{test_metrics['P@20']:.4f}[/] | N: [blue]{test_metrics['N@20']:.4f}[/] | H: [yellow]{test_metrics['H@20']:.4f}[/]",
+        border_style="magenta"
     ))
 
 if __name__ == "__main__":
