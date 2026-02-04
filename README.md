@@ -1,5 +1,5 @@
 # ColdStart-FlowCF-TF
-**Flow Matching based Cold-Start Recommendation System (TensorFlow Implementation)**
+**Flow Matching based Cold-Start Recommendation System**
 
 This repository implements a **Continuous-Time Flow Matching** model for recommender systems, specifically designed to address the **Cold-Start Problem**.
 
