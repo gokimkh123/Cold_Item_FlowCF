@@ -36,10 +36,9 @@ This project is optimized for TensorFlow GPU environments. We strongly recommend
 Prerequisites
 Docker & Docker Compose
 
-NVIDIA GPU Driver & NVIDIA Container Toolkit
 
 Quick Start
-Build and run the container using docker-compose. This handles port forwarding (6006) and volume mounting automatically.
+Build and run the container using docker compose. This handles port forwarding (6006) and volume mounting automatically.
 
 ```Bash
 # 1. Build and start the container in background
