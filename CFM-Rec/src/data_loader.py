@@ -5,32 +5,90 @@ import os
 
 class ColdStartDataLoader:
     def __init__(self, config):
-        self.config = config
-        self.data_path = config['data_path']
-        self.side_info_path = config['side_info_path']
-        self.entity_field = config['entity_field']
-        self.target_field = config['target_field']
+        """
+        config: 전체 설정 딕셔너리 (YAML 로드 결과)
+        """
+        self.dataset_name = config.get('dataset', 'CiteULike')
+        
+        # 해당 데이터셋의 설정 가져오기 (없으면 config 루트에서 검색)
+        ds_config = config.get(self.dataset_name, config)
+        
+        # 설정 적용
+        self.data_path = ds_config.get('data_path', './dataset/citeulike/')
+        self.train_file = ds_config.get('train_file', 'train.csv')
+        self.vali_file = ds_config.get('vali_file', 'vali.csv')
+        self.test_file = ds_config.get('test_file', 'test.csv')
+        self.side_info_path = ds_config.get('side_info_path', './dataset/citeulike/citeulike-tag-emb.npy')
+        
+        # 구분자 설정 (기본값: 쉼표)
+        self.separator = ds_config.get('separator', ',')
+        
+        self.entity_field = ds_config.get('entity_field', 'iid')
+        self.target_field = ds_config.get('target_field', 'uid')
         
         self.head_drop_ratio = config.get('head_drop_ratio', 0.0)
-        self.batch_size = config.get('batch_size', 2048)
+        self.batch_size = config.get('batch_size', 1024)
 
-        # [수정 1] 필터링된 아이템 ID를 저장할 리스트 초기화
+        print(f">>> [DataLoader] Initialized for dataset: {self.dataset_name}")
+        print(f"    - Path: {self.data_path}")
+        print(f"    - Separator: '{self.separator}'")
+
         self.vali_item_ids = []
         self.test_item_ids = []
 
+        # __init__에서는 데이터를 로드하지 않음 (train.py가 build()를 호출할 때 로드)
+
     def _load_inter(self, file_name):
         path = os.path.join(self.data_path, file_name)
-        # ID 타입 불일치 방지를 위해 모든 ID를 문자열(str)로 읽음
-        df = pd.read_csv(path, sep='\t', dtype={
-            f"{self.config['entity_field']}:token": str, 
-            f"{self.config['target_field']}:token": str
-        })
-        df.columns = [col.split(':')[0] for col in df.columns]
+        print(f"    Loading: {path}")
+        
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
+
+        # 구분자 자동 감지 로직
+        sep = self.separator
+        if sep is None:
+            if file_name.endswith('.tsv'):
+                sep = '\t'
+            else:
+                sep = ','
+
+        try:
+            df = pd.read_csv(path, sep=sep)
+        except Exception as e:
+            print(f"    Error reading {file_name} with sep='{sep}': {e}")
+            alt_sep = ',' if sep == '\t' else '\t'
+            print(f"    Retrying with sep='{alt_sep}'...")
+            df = pd.read_csv(path, sep=alt_sep)
+
+        # 컬럼명 정규화
+        rename_map = {}
+        for col in df.columns:
+            c_lower = col.lower()
+            if self.target_field in c_lower or 'user' in c_lower or 'uid' in c_lower:
+                rename_map[col] = self.target_field
+            elif self.entity_field in c_lower or 'item' in c_lower or 'mid' in c_lower or 'iid' in c_lower:
+                rename_map[col] = self.entity_field
+        
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+        # 필수 컬럼 확인 및 대체
+        if self.entity_field not in df.columns or self.target_field not in df.columns:
+            print(f"    Warning: Columns not found via name. Using 1st(User) and 2nd(Item) columns.")
+            # 데이터프레임 복사본 생성 방지를 위해 바로 할당
+            cols = list(df.columns)
+            df.columns = [self.target_field, self.entity_field] + cols[2:]
+
+        # ID를 문자열로 변환
+        df[self.entity_field] = df[self.entity_field].astype(str)
+        df[self.target_field] = df[self.target_field].astype(str)
+        
         return df
 
     def _build_matrix(self, df):
-        """특정 데이터프레임을 Interaction Matrix로 변환"""
         mat = np.zeros((self.num_entities, self.num_targets), dtype=np.float32)
+        
         for _, row in df.iterrows():
             e_token = row[self.entity_field]
             t_token = row[self.target_field]
@@ -41,12 +99,18 @@ class ColdStartDataLoader:
         return mat
 
     def build(self):
+        """
+        데이터를 로드하고 매트릭스를 생성합니다.
+        Returns:
+            num_entities (int): 아이템 수
+            num_targets (int): 유저 수
+        """
         # 1. 데이터 로드
-        train_df = self._load_inter(self.config['train_file'])
-        vali_df = self._load_inter(self.config['vali_file'])
-        test_df = self._load_inter(self.config['test_file'])
+        train_df = self._load_inter(self.train_file)
+        vali_df = self._load_inter(self.vali_file)
+        test_df = self._load_inter(self.test_file)
         
-        # 2. ID 매핑 (전체 데이터셋 기준)
+        # 2. ID 매핑
         full_df = pd.concat([train_df, vali_df, test_df])
         self.entity_tokens = sorted(full_df[self.entity_field].unique())
         self.target_tokens = sorted(full_df[self.target_field].unique())
@@ -56,9 +120,10 @@ class ColdStartDataLoader:
         
         self.num_entities = len(self.entity_tokens)
         self.num_targets = len(self.target_tokens)
+        
+        print(f">>> [Stats] Total Items: {self.num_entities}, Total Users: {self.num_targets}")
 
-        # [수정 2] Vali와 Test에 실제로 등장하는 아이템 ID만 추출 (Cold Item)
-        # evaluate.py의 valid_test_items 로직과 동일하게 만듭니다.
+        # 3. Cold Item 식별
         self.vali_item_ids = sorted(list(set(
             [self.entity2id[t] for t in vali_df[self.entity_field].unique() if t in self.entity2id]
         )))
@@ -66,64 +131,60 @@ class ColdStartDataLoader:
             [self.entity2id[t] for t in test_df[self.entity_field].unique() if t in self.entity2id]
         )))
 
-        print(f">>> [Filter] Vali Items: {len(self.vali_item_ids)} / Test Items: {len(self.test_item_ids)}")
-        
-        # 3. 데이터셋별 매트릭스 분리 생성
-        print(">>> 데이터 매트릭스 변환 중...")
+        # 4. Matrix 생성
+        print(">>> Building Interaction Matrices...")
         self.train_matrix = self._build_matrix(train_df)
         self.vali_matrix = self._build_matrix(vali_df)
-        self.test_matrix = self._build_matrix(test_df) # Test Matrix도 미리 생성
-
-        # 4. Masking (Train Matrix에만 적용)
-        if self.head_drop_ratio > 0:
-            popularity = self.train_matrix.sum(axis=1)
-            num_to_drop = int(self.num_entities * self.head_drop_ratio)
-            if num_to_drop > 0:
-                top_indices = np.argsort(popularity)[-num_to_drop:]
-                self.train_matrix[top_indices] = 0.0
-                print(f">>> [Masking] Train: 상위 {self.head_drop_ratio*100}% 아이템({num_to_drop}개) 마스킹.")
+        self.test_matrix = self._build_matrix(test_df)
 
         # 5. Side Info 로드
-        raw_side_emb = np.load(self.side_info_path)
-        self.side_dim = raw_side_emb.shape[1]
-        self.side_emb = np.zeros((self.num_entities, self.side_dim), dtype=np.float32)
-        
-        for token, eid in self.entity2id.items():
-            try:
-                raw_idx = int(token)
-                if raw_idx < len(raw_side_emb):
-                    self.side_emb[eid] = raw_side_emb[raw_idx]
-            except ValueError:
-                pass
+        print(f">>> Loading Side Info from: {self.side_info_path}")
+        if os.path.exists(self.side_info_path):
+            raw_side_emb = np.load(self.side_info_path)
+            self.side_dim = raw_side_emb.shape[1]
+            self.side_emb = np.zeros((self.num_entities, self.side_dim), dtype=np.float32)
+            
+            hit_count = 0
+            for token, eid in self.entity2id.items():
+                try:
+                    # 토큰이 숫자형 ID인 경우
+                    raw_idx = int(token)
+                    if raw_idx < len(raw_side_emb):
+                        self.side_emb[eid] = raw_side_emb[raw_idx]
+                        hit_count += 1
+                except ValueError:
+                    pass
+            print(f">>> Side Info Loaded. Mapped {hit_count}/{self.num_entities} items.")
+        else:
+            print(f"⚠️ Warning: Side info file not found. Initializing with zeros.")
+            self.side_dim = 128
+            self.side_emb = np.zeros((self.num_entities, self.side_dim), dtype=np.float32)
 
-        # 6. User Activity 계산 (Train 기준)
+        # 6. User Activity (Prior용)
         user_activity = self.train_matrix.mean(axis=0)
         self.user_activity = np.clip(user_activity, 1e-6, 1.0 - 1e-6)
-        
-        print(f">>> 데이터 빌드 완료: Items={self.num_entities}, Users={self.num_targets}")
+
+        # train.py 호환성을 위해 개수 반환
         return self.num_entities, self.num_targets
 
     def get_dataset(self, mode='train'):
-        """학습(train) 또는 검증(vali) 데이터셋 반환"""
-        
-        # [수정 3] 모드에 따라 평가할 아이템(Entity) 범위를 제한
         if mode == 'train':
-            target_matrix = self.train_matrix
-            entity_ids = np.arange(self.num_entities) # Train은 전체 셔플
-        elif mode == 'vali':
-            target_matrix = self.vali_matrix
-            entity_ids = np.array(self.vali_item_ids) # Vali 파일에 있는 아이템만!
-        elif mode == 'test':
-            target_matrix = self.test_matrix
-            entity_ids = np.array(self.test_item_ids) # Test 파일에 있는 아이템만!
-        else:
-            # 기본값 (혹시 모를 오류 방지)
-            target_matrix = self.train_matrix
             entity_ids = np.arange(self.num_entities)
-        
+            target_matrix = self.train_matrix
+            shuffle = True
+        elif mode == 'vali':
+            entity_ids = np.array(self.vali_item_ids)
+            target_matrix = self.vali_matrix
+            shuffle = False
+        elif mode == 'test':
+            entity_ids = np.array(self.test_item_ids)
+            target_matrix = self.test_matrix
+            shuffle = False
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+
         def generator():
             for eid in entity_ids:
-                # (정답 벡터, 조건 벡터)
                 yield target_matrix[eid], self.side_emb[eid]
 
         dataset = tf.data.Dataset.from_generator(
@@ -133,11 +194,10 @@ class ColdStartDataLoader:
                 tf.TensorSpec(shape=(self.side_dim,), dtype=tf.float32)
             )
         )
-        
-        if mode == 'train':
+
+        if shuffle:
             dataset = dataset.shuffle(self.num_entities).batch(self.batch_size)
         else:
-            # 평가 시에는 순서대로 (셔플 X)
             dataset = dataset.batch(self.batch_size)
-            
+
         return dataset.prefetch(tf.data.AUTOTUNE)

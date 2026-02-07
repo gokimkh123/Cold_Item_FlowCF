@@ -1,28 +1,45 @@
 # config.yaml
 
-# --- Data Configuration ---
-data_path: "./dataset/ML1M/BPR_cv/"
-train_file: "BPR_cv.train.inter"
-vali_file: "BPR_cv.vali.inter"
-test_file: "BPR_cv.test.inter"
-side_info_path: "./dataset/ML1M/mv-tag-emb.npy"
-entity_field: "mid"
-target_field: "uid"
+# --- Dataset Selection (Choose one) ---
+# dataset: "ML1M"
+dataset: "ML1M"
+
+# --- ML1M Configuration (TSV, Tab-separated) ---
+ML1M:
+  data_path: "./dataset/ML1M/BPR_cv/"
+  train_file: "train.tsv"
+  vali_file: "vali.tsv"
+  test_file: "test.tsv"
+  side_info_path: "./dataset/ML1M/mv-tag-emb.npy"
+  separator: "\t"       # 탭 구분자
+  entity_field: "mid"   # Item ID
+  target_field: "uid"   # User ID
+
+# --- CiteULike Configuration (CSV, Comma-separated) ---
+CiteULike:
+  data_path: "./dataset/citeulike/"
+  train_file: "train.csv"
+  vali_file: "vali.csv"
+  test_file: "test.csv"
+  side_info_path: "./dataset/citeulike/citeulike-tag-emb.npy"
+  separator: ","        # 쉼표 구분자
+  entity_field: "iid"   # Item ID
+  target_field: "uid"   # User ID
 
 # --- Model Architecture ---
-prior_type: 'noise'  # Prior distribution type: 'popularity' or 'noise' (인기 기반 또는 완전 무작위)
+prior_type: 'noise'  # 'popularity' or 'noise'
 dims_mlp: [300, 300]
 time_embedding_size: 16
 dropout: 0.0
 head_drop_ratio: 0.0
 
 # --- Flow Matching Core Settings ---
-n_step: 100           # Time discretization steps during training (학습 시 시간 이산화 단계)
-inference_steps: 100  # ODE Solver steps during inference (추론 시 ODE Solver 스텝)
+n_step: 100
+inference_steps: 100
 
 # --- Training Parameters ---
 batch_size: 1024
 learning_rate: 0.001
 epochs: 300
-eval_step: 10         # Evaluate every 10 epochs
-patience: 10          # Early stopping patience (in number of eval_steps)
+eval_step: 10
+patience: 10
